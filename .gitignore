@@ -1,16 +1,29 @@
-# Ignore environment variables
+# Ignore environment files
 .env
+.env.local
+.env.production
+.env.development
 
-# Ignore Python cache
+# Python cache
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Ignore virtual environment
+# Virtual environment
 venv/
-.env/
-.venv/
+.envrc
 
-# Ignore macOS system files
+# Logs
+*.log
+
+# OS files
 .DS_Store
+Thumbs.db
+
+# Node.js (if used anywhere later)
+node_modules/
+
+# Secrets
+/secrets.json
+apikeys.txt
