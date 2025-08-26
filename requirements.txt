@@ -1,6 +1,6 @@
 discord.py==2.3.2
-requests
+python-dotenv
 aiohttp
+requests
 alpaca-trade-api
 websockets
-python-dotenv
