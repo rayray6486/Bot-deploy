@@ -4,6 +4,8 @@ requests==2.31.0
 
 # Discord bot
 discord.py==2.3.2
+aiohttp==3.9.5
+websockets==12.0
 
 # Stripe
 stripe==7.10.0
@@ -16,7 +18,7 @@ finnhub-python==2.4.18
 openai==1.12.0
 
 # Deployment / Automation
-paramiko==3.3.1       # SSH to droplet
+paramiko==3.3.1          # SSH to droplet
 python-digitalocean==1.17.0
 
 # Utils
