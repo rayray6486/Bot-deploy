@@ -1,26 +1,11 @@
-# Core
-python-dotenv==1.0.1
-requests==2.31.0
-
-# Discord bot
 discord.py==2.3.2
-aiohttp==3.9.5
+requests==2.31.0
+aiohttp==3.9.1
 websockets==12.0
-
-# Stripe
 stripe==7.10.0
-
-# Trading APIs
-alpaca-trade-api==3.0.2
-finnhub-python==2.4.18
-
-# AI
-openai==1.12.0
-
-# Deployment / Automation
-paramiko==3.3.1          # SSH to droplet
-python-digitalocean==1.17.0
-
-# Utils
-pytz==2023.3
+alpaca-trade-api==3.0.0
+finnhub-python==2.4.17
+python-dotenv==1.0.0
+pandas==2.1.4
+numpy==1.26.3
 schedule==1.2.1
