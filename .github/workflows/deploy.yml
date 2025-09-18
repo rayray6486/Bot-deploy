@@ -17,7 +17,7 @@ jobs:
       - name: Copy files to Droplet
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.DROPLETIP }}
+          host: ${{ secrets.DROPLET_IP }}
           username: ${{ secrets.DROPLET_SSH_USER }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
           source: "."
