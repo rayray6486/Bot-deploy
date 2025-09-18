@@ -20,7 +20,6 @@ jobs:
       - name: Compile check
         run: python -m py_compile slum_house_capital_bot.py cogs/*.py utils/*.py
 
-      # Copy repo to the droplet (no .env is in git, so it's not copied)
       - name: Copy files to Droplet
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -32,7 +31,6 @@ jobs:
           rm: true
           overwrite: true
 
-      # Install deps on the droplet and restart the service
       - name: Install deps & restart service
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -43,7 +41,7 @@ jobs:
             set -euo pipefail
             cd /root/Bot-deploy
             python3 -m venv .venv || true
-            source .venv/bin/activate
+            . .venv/bin/activate
             pip install --upgrade pip setuptools wheel
             if [ -f requirements.txt ]; then
               pip install -r requirements.txt
@@ -52,14 +50,31 @@ jobs:
             fi
             python - <<'PY'
 import nltk, sys
-for p in ("punkt", "stopwords"):
-    try:
-        nltk.download(p, quiet=True)
-    except Exception as e:
-        print("NLTK warn:", e, file=sys.stderr)
+for p in ("punkt","stopwords"):
+    try: nltk.download(p, quiet=True)
+    except Exception as e: print("NLTK warn:", e, file=sys.stderr)
 PY
+            if [ ! -f /etc/systemd/system/slumhousebot.service ]; then
+              cat >/etc/systemd/system/slumhousebot.service <<'UNIT'
+[Unit]
+Description=Slum House Capital Discord Bot
+After=network-online.target
+
+[Service]
+User=root
+WorkingDirectory=/root/Bot-deploy
+EnvironmentFile=/root/Bot-deploy/.env
+ExecStart=/root/Bot-deploy/.venv/bin/python /root/Bot-deploy/slum_house_capital_bot.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+              systemctl daemon-reload
+              systemctl enable slumhousebot || true
+            fi
             systemctl daemon-reload
             systemctl restart slumhousebot || true
-            systemctl enable  slumhousebot || true
             systemctl status  slumhousebot --no-pager || true
             journalctl -u slumhousebot -n 50 --no-pager || true
