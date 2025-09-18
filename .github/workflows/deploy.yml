@@ -1,36 +1,65 @@
-- name: Install deps & restart service
-  env:
-    USER: ${{ secrets.DROPLET_SSH_USER }}
-    HOST: ${{ secrets.DROPLET_IP }}
-  run: |
-    ssh -i ~/.ssh/id_ci "${USER}@${HOST}" 'bash -s' <<'REMOTE'
-    set -euo pipefail
-    cd /root/Bot-deploy
+name: Deploy to Droplet
 
-    # venv + deps
-    python3 -m venv .venv || true
-    source .venv/bin/activate
-    pip install --upgrade pip setuptools wheel
-    if [ -f requirements.txt ]; then
-      pip install -r requirements.txt
-    else
-      pip install -U py-cord requests yfinance PyPDF2 nltk python-dotenv
-    fi
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
 
-    # download NLTK data (non-fatal if it flakes)
-    python - <<'PY'
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Compile check
+        run: python -m py_compile slum_house_capital_bot.py cogs/*.py utils/*.py
+
+      # Copy repo to the droplet (no .env is in git, so it's not copied)
+      - name: Copy files to Droplet
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DROPLET_IP }}
+          username: ${{ secrets.DROPLET_SSH_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          source: "."
+          target: "/root/Bot-deploy"
+          rm: true
+          overwrite: true
+
+      # Install deps on the droplet and restart the service
+      - name: Install deps & restart service
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DROPLET_IP }}
+          username: ${{ secrets.DROPLET_SSH_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /root/Bot-deploy
+            python3 -m venv .venv || true
+            source .venv/bin/activate
+            pip install --upgrade pip setuptools wheel
+            if [ -f requirements.txt ]; then
+              pip install -r requirements.txt
+            else
+              pip install -U py-cord requests yfinance PyPDF2 nltk python-dotenv
+            fi
+            python - <<'PY'
 import nltk, sys
-for p in ["punkt", "stopwords"]:
+for p in ("punkt", "stopwords"):
     try:
         nltk.download(p, quiet=True)
     except Exception as e:
         print("NLTK warn:", e, file=sys.stderr)
 PY
-
-    # restart the service and show tail
-    systemctl daemon-reload
-    systemctl restart slumhousebot || true
-    systemctl enable  slumhousebot || true
-    systemctl status  slumhousebot --no-pager || true
-    journalctl -u slumhousebot -n 50 --no-pager || true
-REMOTE
+            systemctl daemon-reload
+            systemctl restart slumhousebot || true
+            systemctl enable  slumhousebot || true
+            systemctl status  slumhousebot --no-pager || true
+            journalctl -u slumhousebot -n 50 --no-pager || true
