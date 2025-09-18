@@ -18,23 +18,25 @@ jobs:
         with:
           python-version: '3.10'
 
-      # compile is optional; tolerate missing folders
+      # compile is optional; tolerate missing folders/globs
       - name: Compile check
         shell: bash
         run: |
           shopt -s nullglob
           python -m py_compile slum_house_capital_bot.py cogs/*.py utils/*.py || true
 
-      # quick sanity: required secrets present (won't print them)
+      # Verify required secrets exist (won't print them)
       - name: Validate required secrets
         env:
           HOST:   ${{ secrets.DROPLET_IP }}
           USER:   ${{ secrets.DROPLET_SSH_USER }}
           SSHKEY: ${{ secrets.DROPLET_SSH_KEY }}
         run: |
-          [ -n "$HOST" ] && [ -n "$USER" ] && [ -n "$SSHKEY" ] || { echo "ERROR: Missing DROPLET_IP / DROPLET_SSH_USER / DROPLET_SSH_KEY"; exit 1; }
+          test -n "$HOST"  || { echo "Missing DROPLET_IP"; exit 1; }
+          test -n "$USER"  || { echo "Missing DROPLET_SSH_USER"; exit 1; }
+          test -n "$SSHKEY"|| { echo "Missing DROPLET_SSH_KEY"; exit 1; }
 
-      # copy repo to the server (we keep .env on the server)
+      # Copy repo (we keep .env on the server)
       - name: Copy files to Droplet
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -46,7 +48,7 @@ jobs:
           rm: true
           overwrite: true
 
-      # install deps, ensure systemd unit exists (idempotent), restart, tail logs
+      # Install deps, ensure systemd unit, restart, tail logs (all YAML-safe)
       - name: Install deps & restart service
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -67,23 +69,16 @@ jobs:
               pip install -U py-cord requests yfinance PyPDF2 python-dotenv nltk
             fi
 
-            # NLTK data (non-fatal)
-            python - <<'PY'
-import nltk, sys
-for p in ("punkt","stopwords"):
-    try:
-        nltk.download(p, quiet=True)
-    except Exception as e:
-        print("NLTK warn:", e, file=sys.stderr)
-PY
+            # NLTK (single line; no heredoc)
+            python -c "import nltk; [nltk.download(p, quiet=True) for p in ('punkt','stopwords')]" || true
 
-            # ensure .env exists (fail fast with a clear message)
+            # Ensure .env exists
             if [ ! -f .env ]; then
-              echo "ERROR: /root/Bot-deploy/.env not found on server. Create it and re-run."
+              echo 'ERROR: /root/Bot-deploy/.env not found on server. Create it and re-run.' >&2
               exit 2
             fi
 
-            # write unit file via printf (no heredocs => no YAML parsing issues)
+            # Idempotent systemd unit (printf avoids heredocs)
             if [ ! -f /etc/systemd/system/slumhousebot.service ]; then
               printf '%s\n' \
                 '[Unit]' \
@@ -100,7 +95,7 @@ PY
                 '' \
                 '[Install]' \
                 'WantedBy=multi-user.target' \
-                | tee /etc/systemd/system/slumhousebot.service >/dev/null
+                > /etc/systemd/system/slumhousebot.service
               systemctl daemon-reload
               systemctl enable slumhousebot || true
             fi
