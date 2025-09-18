@@ -3,34 +3,71 @@ name: Deploy to Droplet
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Copy the repo to the droplet
-      - name: Copy files to Droplet
-        uses: appleboy/scp-action@v0.1.7
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          host: ${{ secrets.DROPLET_IP }}
-          username: ${{ secrets.DROPLET_SSH_USER }}
-          key: ${{ secrets.DROPLET_SSH_KEY }}
-          source: "."
-          target: "/opt/slumhouse-bot"
+          python-version: '3.10'
 
-      # Configure & restart service on the droplet
-      - name: Configure and start service on Droplet
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.DROPLETIP }}
-          username: ${{ secrets.DROPLET_SSH_USER }}
-          key: ${{ secrets.DROPLET_SSH_KEY }}
-          script: |
-            set -euo pipefail
+      - name: Compile check
+        run: python -m py_compile slum_house_capital_bot.py cogs/*.py utils/*.py
 
-            APP_DIR=/opt/slumhouse-bot
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y rsync openssh-client
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          HOST:    ${{ secrets.DROPLET_IP }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ci
+          chmod 600 ~/.ssh/id_ci
+          ssh-keyscan "$HOST" >> ~/.ssh/known_hosts
+
+      - name: Rsync code to server
+        env:
+          USER: ${{ secrets.DROPLET_SSH_USER }}
+          HOST: ${{ secrets.DROPLET_IP }}
+        run: |
+          rsync -avz --delete \
+            --exclude '.git' --exclude '.venv' --exclude '__pycache__' --exclude 'logs' --exclude '.env' \
+            -e "ssh -i ~/.ssh/id_ci" \
+            ./ ${USER}@${HOST}:/root/Bot-deploy/
+
+      - name: Install deps & restart service
+        env:
+          USER: ${{ secrets.DROPLET_SSH_USER }}
+          HOST: ${{ secrets.DROPLET_IP }}
+        run: |
+          ssh -i ~/.ssh/id_ci ${USER}@${HOST} <<'S'
+          set -euo pipefail
+          cd /root/Bot-deploy
+          python3 -m venv .venv || true
+          source .venv/bin/activate
+          pip install --upgrade pip setuptools wheel
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install -U py-cord requests yfinance PyPDF2 nltk python-dotenv
+          fi
+          python - <<'PY'
+import nltk, sys
+for p in ['punkt','stopwords']:
+    try: nltk.download(p, quiet=True)
+    except Exception as e: print("NLTK warn:", e, file=sys.stderr)
+PY
+          systemctl daemon-reload
+          systemctl restart slumhousebot || true
+          systemctl enable slumhousebot  || true
+          systemctl status slumhousebot --no-pager || true
+          journalctl -u slumhousebot -n 50 --no-pager || true
+S
