@@ -2,11 +2,11 @@ python-dotenv==1.0.1
 requests==2.31.0
 discord.py==2.3.2
 aiohttp==3.8.6
-websockets==11.0.3
+websockets>=10,<11
 stripe==7.10.0
 alpaca-trade-api==3.0.2
 finnhub-python==2.4.18
-openai==1.12.0
+openai>=1.40.2
 paramiko==3.3.1
 python-digitalocean==1.17.0
 pytz==2023.3

@@ -1,35 +1,69 @@
-  import os
+"""Entry point for the Slum House Capital Discord bot."""
+
+from __future__ import annotations
+
 import logging
-from dotenv import load_dotenv
 from pathlib import Path
+from typing import List
 
-# Load .env if present (useful on the droplet where we create it)
-load_dotenv(dotenv_path=Path(".env") if Path(".env").exists() else None)
+import discord
+from discord.ext import commands
 
-# === your exact secret names ===
-DISCORD_TOKEN            = os.getenv("DISCORD_BOT_TOKEN")         # token string
-DISCORD_CLIENT_ID        = os.getenv("DISCORD_CLIENT_ID")         # app id
-DISCORD_GUILD_ID         = os.getenv("DISCORD_GUILD_ID")          # optional: int(str)
-DISCORD_ALERT_CHANNEL_ID = os.getenv("DISCORD_ALERT_CHANNEL_ID")  # optional: int(str)
+from shc import config
 
-ADMIN_USER_ID            = os.getenv("ADMIN_USER_ID")
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(levelname)s %(name)s: %(message)s",
+)
 
-STRIPE_SECRET_KEY        = os.getenv("STRIPE_SECRET_KEY")
-STRIPE_PUBLISHABLE_KEY   = os.getenv("STRIPE_PUBLISHABLE_KEY")
-STRIPE_WEBHOOK_SECRET    = os.getenv("STRIPE_WEBHOOK_SECRET")
+INITIAL_EXTENSIONS: List[str] = [
+    "shc.bootstrap_cog",
+    "shc.agents.signals_cog",
+    "shc.agents.news_cog",
+    "shc.agents.scheduler_cog",
+    "shc.agents.ops_cog",
+]
 
-FINNHUB_API_KEY          = os.getenv("FINNHUB_API_KEY")
 
-ALPACA_API_KEY_ID        = os.getenv("ALPACA_API_KEY_ID")
-ALPACA_API_SECRET_KEY    = os.getenv("ALPACA_API_SECRET_KEY", "")  # if you add later
-ALPACA_API_BASE_URL      = os.getenv("ALPACA_API_BASE_URL")
+class SHCBot(commands.Bot):
+    def __init__(self) -> None:
+        intents = discord.Intents.default()
+        super().__init__(command_prefix="!", intents=intents)
 
-OPENAI_API_KEY           = os.getenv("OPENAI_API_KEY")
+    async def setup_hook(self) -> None:
+        config.ensure_runtime_config()
+        for extension in INITIAL_EXTENSIONS:
+            try:
+                await self.load_extension(extension)
+                logging.info("Loaded extension %s", extension)
+            except Exception as exc:  # pragma: no cover - defensive at runtime
+                logging.exception("Failed to load extension %s: %s", extension, exc)
+        guild_id = config.guild()
+        try:
+            if guild_id:
+                guild = discord.Object(id=guild_id)
+                await self.tree.sync(guild=guild)
+                logging.info("Slash commands synced for guild %s", guild_id)
+            else:
+                await self.tree.sync()
+                logging.info("Slash commands synced globally")
+        except discord.HTTPException as exc:
+            logging.error("Command sync failed: %s", exc)
 
-# Basic sanity (fail fast if a must-have is missing)
-missing = [k for k,v in {
-    "DISCORD_BOT_TOKEN":DISCORD_TOKEN,
-    "STRIPE_SECRET_KEY":STRIPE_SECRET_KEY,
-}.items() if not v]
-if missing:
-    raise SystemExit(f"Missing required secret(s): {', '.join(missing)}")
+    async def on_ready(self) -> None:
+        guild_id = config.guild()
+        loaded = ", ".join(INITIAL_EXTENSIONS)
+        logging.info("Ready as %s (guild=%s). Extensions: %s", self.user, guild_id, loaded)
+
+
+def main() -> None:
+    config.load_env(Path(".env") if Path(".env").exists() else None)
+    config.ensure_runtime_config()
+    token = config.bot_token()
+    bot = SHCBot()
+    bot.run(token)
+
+
+if __name__ == "__main__":  # pragma: no cover
+    main()
+
