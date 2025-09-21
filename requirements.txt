@@ -11,3 +11,7 @@ paramiko==3.3.1
 python-digitalocean==1.17.0
 pytz==2023.3
 schedule==1.2.1
+sentence-transformers>=2.7.0
+faiss-cpu>=1.7.4
+pypdf>=4.2.0
+rapidfuzz>=3.6.0
