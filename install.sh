@@ -8,10 +8,10 @@ echo "⚙️ Installing dependencies..."
 sudo apt install -y python3 python3-pip git
 
 echo "📥 Cloning repo..."
-if [ ! -d "bot-depoly" ]; then
-  git clone https://github.com/rayray6486/bot-depoly.git
+if [ ! -d "bot-deploy" ]; then
+  git clone https://github.com/rayray6486/bot-deploy.git
 fi
-cd bot-depoly
+cd bot-deploy
 
 echo "📦 Installing Python packages..."
 pip3 install -r requirements.txt
