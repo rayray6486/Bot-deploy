@@ -1,0 +1,32 @@
+name: Smoke
+on: workflow_dispatch  # run by hand
+
+jobs:
+  verify-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required secrets exist (masked)
+        run: |
+          need() { [ -n "${!1}" ] && echo "✓ $1" || (echo "✗ $1 missing" && exit 1); }
+          need DO_HOST; need DO_USER; need DO_SSH_KEY
+          echo "Secrets present."
+        env:
+          DO_HOST: ${{ secrets.DO_HOST }}
+          DO_USER: ${{ secrets.DO_USER }}
+          DO_SSH_KEY: ${{ secrets.DO_SSH_KEY }}
+
+  ssh-ping:
+    needs: verify-secrets
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH to droplet and stamp file
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: |
+            mkdir -p /opt/shc
+            date | tee /opt/shc/connected.txt
+            which docker || curl -fsSL https://get.docker.com | sh
+            docker --version
