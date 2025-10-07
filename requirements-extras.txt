@@ -1,0 +1,18 @@
+# Trading / APIs (optional)
+alpaca-trade-api==3.0.2
+finnhub-python==2.4.18
+stripe==7.10.0
+python-digitalocean==1.17.0
+paramiko==3.3.1
+pytz==2023.3
+schedule==1.2.1
+
+# NLP / RAG (heavy; add later if truly needed)
+sentence-transformers==2.7.0
+faiss-cpu==1.7.4
+numpy==1.26.4
+pypdf==4.2.0
+rapidfuzz==3.6.0
+openai==1.40.2
+websockets>=10,<11
+pydantic==2.9.2
