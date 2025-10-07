@@ -1,0 +1,6 @@
+services:
+  shc-bot:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-rayray6486}/shc-bot:latest
+    container_name: shc-bot
+    restart: unless-stopped
+    env_file: /opt/shc/.env.bot
