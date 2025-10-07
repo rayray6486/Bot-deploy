@@ -1,0 +1,76 @@
+name: Repo Audit
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Print repo root listing
+        run: |
+          echo "=== repo root ==="
+          ls -la
+
+      - name: Show workflows
+        run: |
+          echo "=== .github/workflows ==="
+          ls -la .github/workflows || true
+          for f in .github/workflows/*.yml .github/workflows/*.yaml; do
+            [ -f "$f" ] || continue
+            echo "----- $f -----"
+            sed -n '1,200p' "$f"
+          done
+
+      - name: Grep for secret usage (names only)
+        run: |
+          echo "=== Common secret names found in repo (lines show variable names but not values) ==="
+          grep -R --line-number -E "DISCORD|DO_HOST|DO_USER|DO_SSH|ALPACA|FINNHUB|OPENAI|STRIPE|GITHUB_TOKEN" || true
+
+      - name: Inspect docker-compose / compose files
+        run: |
+          echo "=== Compose files (top 200 lines) ==="
+          for f in docker-compose.yml docker-compose.yaml compose.yml .github/compose-hello.yml; do
+            [ -f "$f" ] || continue
+            echo "----- $f -----"
+            sed -n '1,200p' "$f"
+          done
+
+      - name: Inspect bot token lookups and env handling
+        run: |
+          echo "=== Search for token loading patterns ==="
+          grep -R --line-number -E "DISCORD_TOKEN|DISCORD_BOT_TOKEN|ALPACA_API|OPENAI_API" || true
+          # show small snippets from likely files
+          grep -R --line-number -n "DISCORD_TOKEN" --exclude-dir=.git || true
+
+      - name: Dump important file snippets
+        run: |
+          for f in bot.py app.py .env.example requirements.txt; do
+            [ -f "$f" ] || continue
+            echo "----- $f -----"
+            sed -n '1,200p' "$f"
+          done
+
+      - name: Package audit logs
+        run: |
+          mkdir -p audit-output
+          echo "Workflows list" > audit-output/summary.txt
+          ls -la .github/workflows >> audit-output/summary.txt || true
+          echo "Files at root" >> audit-output/summary.txt
+          ls -la >> audit-output/summary.txt
+          tar -czf audit-output.tgz audit-output
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: repo-audit
+          path: audit-output.tgz
