@@ -1,69 +1,34 @@
-"""Entry point for the Slum House Capital Discord bot."""
-
-from __future__ import annotations
-
-import logging
-from pathlib import Path
-from typing import List
-
-import discord
+import os, asyncio, logging, discord
 from discord.ext import commands
 
-from shc import config
+logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")))
+logger = logging.getLogger("shc")
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] %(levelname)s %(name)s: %(message)s",
-)
+INTENTS = discord.Intents.default()
+INTENTS.message_content = True
+INTENTS.guilds = True
 
-INITIAL_EXTENSIONS: List[str] = [
-    "shc.bootstrap_cog",
-    "shc.agents.signals_cog",
-    "shc.agents.news_cog",
-    "shc.agents.scheduler_cog",
-    "shc.agents.ops_cog",
-]
+bot = commands.Bot(command_prefix="!", intents=INTENTS)
+COGS = ["cogs.etf_watchlists"]
 
+@bot.event
+async def on_ready():
+    logger.info("Logged in as %s (%s)", bot.user, bot.user.id)
+    await bot.tree.sync()
+    logger.info("Slash commands synced")
 
-class SHCBot(commands.Bot):
-    def __init__(self) -> None:
-        intents = discord.Intents.default()
-        super().__init__(command_prefix="!", intents=intents)
-
-    async def setup_hook(self) -> None:
-        config.ensure_runtime_config()
-        for extension in INITIAL_EXTENSIONS:
-            try:
-                await self.load_extension(extension)
-                logging.info("Loaded extension %s", extension)
-            except Exception as exc:  # pragma: no cover - defensive at runtime
-                logging.exception("Failed to load extension %s: %s", extension, exc)
-        guild_id = config.guild()
+async def main():
+    for cog in COGS:
         try:
-            if guild_id:
-                guild = discord.Object(id=guild_id)
-                await self.tree.sync(guild=guild)
-                logging.info("Slash commands synced for guild %s", guild_id)
-            else:
-                await self.tree.sync()
-                logging.info("Slash commands synced globally")
-        except discord.HTTPException as exc:
-            logging.error("Command sync failed: %s", exc)
+            await bot.load_extension(cog)
+            logger.info("Loaded cog: %s", cog)
+        except Exception as e:
+            logger.exception("Failed to load cog %s: %s", cog, e)
 
-    async def on_ready(self) -> None:
-        guild_id = config.guild()
-        loaded = ", ".join(INITIAL_EXTENSIONS)
-        logging.info("Ready as %s (guild=%s). Extensions: %s", self.user, guild_id, loaded)
+    token = os.getenv("DISCORD_TOKEN") or os.getenv("DISCORD_BOT_TOKEN")
+    if not token:
+        raise RuntimeError("DISCORD_TOKEN or DISCORD_BOT_TOKEN not set")
+    await bot.start(token)
 
-
-def main() -> None:
-    config.load_env(Path(".env") if Path(".env").exists() else None)
-    config.ensure_runtime_config()
-    token = config.bot_token()
-    bot = SHCBot()
-    bot.run(token)
-
-
-if __name__ == "__main__":  # pragma: no cover
-    main()
-
+if __name__ == "__main__":
+    asyncio.run(main())
