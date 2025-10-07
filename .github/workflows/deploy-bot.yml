@@ -71,7 +71,7 @@ jobs:
             EOF
             chmod 600 /opt/shc/.env.bot
 
- - name: Pull & restart container via compose
+- name: Pull & restart container via compose
   uses: appleboy/ssh-action@v1.0.3
   with:
     host: ${{ secrets.DO_HOST }}
