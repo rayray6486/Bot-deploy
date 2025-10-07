@@ -71,14 +71,38 @@ jobs:
             EOF
             chmod 600 /opt/shc/.env.bot
 
-      - name: Pull & restart container via compose
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.DO_HOST }}
-          username: ${{ secrets.DO_USER }}
-          key: ${{ secrets.DO_SSH_KEY }}
-          script: |
-            cd /opt/shc
-            docker pull ghcr.io/${{ github.repository_owner }}/shc-bot:latest
-            docker compose -f compose-bot.yml down || true
-            docker compose -f compose-bot.yml up -d
+ - name: Pull & restart container via compose
+  uses: appleboy/ssh-action@v1.0.3
+  with:
+    host: ${{ secrets.DO_HOST }}
+    username: ${{ secrets.DO_USER }}
+    key: ${{ secrets.DO_SSH_KEY }}
+    script: |
+      set -e
+      cd /opt/shc
+
+      # Normalize path if scp preserved the .github folder
+      if [ -f .github/compose-bot.yml ]; then
+        mv -f .github/compose-bot.yml compose-bot.yml
+        rmdir .github 2>/dev/null || true
+      fi
+
+      # Last resort: create compose-bot.yml if it's still missing
+      if [ ! -f compose-bot.yml ]; then
+        cat > compose-bot.yml <<'EOF'
+        services:
+          shc-bot:
+            image: ghcr.io/${OWNER}/shc-bot:latest
+            container_name: shc-bot
+            restart: unless-stopped
+            env_file: /opt/shc/.env.bot
+        EOF
+      fi
+
+      # Pull latest image and (re)start service
+      OWNER="${{ github.repository_owner }}"
+      sed -i "s|\${OWNER}|$OWNER|g" compose-bot.yml
+
+      docker pull ghcr.io/${{ github.repository_owner }}/shc-bot:latest
+      docker compose -f compose-bot.yml down || true
+      docker compose -f compose-bot.yml up -d
