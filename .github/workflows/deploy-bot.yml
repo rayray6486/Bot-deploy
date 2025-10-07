@@ -1,0 +1,84 @@
+name: Deploy Bot
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/shc-bot:latest
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload compose file to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          source: ".github/compose-bot.yml"
+          target: "/opt/shc/"
+
+      - name: Write /opt/shc/.env.bot on server (from GitHub Secrets)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: |
+            mkdir -p /opt/shc
+            cat > /opt/shc/.env.bot <<'EOF'
+            # --- Slum House Capital Bot Env ---
+            # Discord (support both names)
+            DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
+            DISCORD_BOT_TOKEN=${{ secrets.DISCORD_BOT_TOKEN }}
+
+            # Optional APIs
+            ALPACA_KEY=${{ secrets.ALPACA_KEY }}
+            ALPACA_SECRET=${{ secrets.ALPACA_SECRET }}
+            ALPACA_API_KEY_ID=${{ secrets.ALPACA_API_KEY_ID }}
+            ALPACA_API_SECRET_KEY=${{ secrets.ALPACA_API_SECRET_KEY }}
+            FINNHUB_KEY=${{ secrets.FINNHUB_KEY }}
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            NEWS_API_KEY=${{ secrets.NEWS_API_KEY }}
+            STRIPE_API_KEY=${{ secrets.STRIPE_API_KEY }}
+
+            # Runtime
+            LOG_LEVEL=INFO
+            EOF
+            chmod 600 /opt/shc/.env.bot
+
+      - name: Pull & restart container via compose
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          script: |
+            cd /opt/shc
+            docker pull ghcr.io/${{ github.repository_owner }}/shc-bot:latest
+            docker compose -f compose-bot.yml down || true
+            docker compose -f compose-bot.yml up -d
